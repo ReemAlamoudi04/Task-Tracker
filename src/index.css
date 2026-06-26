@@ -1,0 +1,121 @@
+/* ─── Reset & base ─────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg:      #f6f3ee;
+  --surface: #ffffff;
+  --surface2:#fcfbf9;
+  --ink:     #211d18;
+  --muted:   #9a9184;
+  --line:    #ece6dd;
+  --rad:     16px;
+  --rsm:     10px;
+  --shadow:  0 1px 3px rgba(40,30,10,.06);
+  --gap:     22px;
+  --cgap:    14px;
+  --cardpad: 16px 18px;
+}
+
+html, body, #root {
+  height: 100%;
+  font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  background: var(--bg);
+  color: var(--ink);
+}
+
+textarea, input, select, button { font-family: inherit; }
+textarea { resize: vertical; }
+button { cursor: pointer; }
+
+/* ─── Keyframes ────────────────────────────────── */
+@keyframes pop {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes slide-up {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* ─── Reusable classes ─────────────────────────── */
+.tt-tarea {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: var(--rsm);
+  padding: 10px 12px;
+  font-size: 13px;
+  line-height: 1.5;
+  background: var(--surface2);
+  color: var(--ink);
+  outline: none;
+  transition: border-color .15s, background .15s;
+}
+.tt-tarea:focus {
+  border-color: var(--muted);
+  background: var(--surface);
+}
+
+.tt-input {
+  border: 1px solid var(--line);
+  border-radius: var(--rsm);
+  padding: 9px 12px;
+  font-size: 13px;
+  background: var(--surface2);
+  color: var(--ink);
+  outline: none;
+  transition: border-color .15s;
+}
+.tt-input:focus { border-color: var(--muted); }
+
+::placeholder { color: var(--muted); }
+
+/* ─── Modal overlay ────────────────────────────── */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 16px;
+  animation: fade-in .15s ease;
+}
+.modal-box {
+  background: var(--surface);
+  border-radius: var(--rad);
+  padding: 24px;
+  width: 100%;
+  max-width: 480px;
+  box-shadow: 0 8px 32px rgba(0,0,0,.14);
+  animation: slide-up .18s ease;
+}
+
+/* ─── Scrollbar ─────────────────────────────────── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--line); border-radius: 3px; }
+
+/* ─── Mobile safe area padding ─────────────────── */
+@supports (padding: max(0px)) {
+  .safe-bottom { padding-bottom: max(16px, env(safe-area-inset-bottom)); }
+}
+
+/* ─── Touch-friendly tap targets ───────────────── */
+@media (hover: none) {
+  button, [role="button"] { min-height: 44px; }
+}
+
+/* ─── Responsive helpers ────────────────────────── */
+@media (max-width: 639px) {
+  .hide-mobile { display: none !important; }
+  .modal-box { padding: 20px 16px; border-radius: var(--rsm); }
+}
+@media (min-width: 640px) {
+  .hide-desktop { display: none !important; }
+}
