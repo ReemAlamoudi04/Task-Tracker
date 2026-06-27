@@ -1,52 +1,50 @@
 import { useState, useMemo } from 'react'
 import AppLayout from '../components/layout/AppLayout'
 import TaskCard from '../components/tasks/TaskCard'
-import TaskForm from '../components/tasks/TaskForm'
 import ShareModal from '../components/tasks/ShareModal'
+import CalendarSection from '../components/tasks/CalendarSection'
+import MessagesSection from '../components/tasks/MessagesSection'
 import { useAuth } from '../contexts/AuthContext'
 import { useTasks } from '../hooks/useTasks'
 import { useCategories, PALETTE } from '../hooks/useCategories'
 
-const STATUS_COLS = [
-  { key:'todo',        label:'To Do',       color:'var(--muted)' },
-  { key:'in_progress', label:'In Progress', color:'#3b82f6' },
-  { key:'done',        label:'Done',        color:'#30a46c' },
-  { key:'blocked',     label:'Blocked',     color:'#e5484d' },
-]
-
 function hexAlpha(hex, a) {
+  if (!hex || hex.startsWith('var')) return `rgba(136,136,136,${a})`
   const h = hex.replace('#','')
-  const [r,g,b] = [parseInt(h.slice(0,2),16), parseInt(h.slice(2,4),16), parseInt(h.slice(4,6),16)]
+  const r=parseInt(h.slice(0,2),16), g=parseInt(h.slice(2,4),16), b=parseInt(h.slice(4,6),16)
   return `rgba(${r},${g},${b},${a})`
+}
+function loadTitle() {
+  try { return localStorage.getItem('tt_board_title') || 'Task Tracker' } catch { return 'Task Tracker' }
 }
 
 export default function OwnerDashboard() {
   const { profile } = useAuth()
-  const { tasks, loading, createTask, updateTask, deleteTask, addStep, toggleStep, updateStep, addComment } = useTasks(profile?.id)
+  const { tasks, loading, createTask, updateTask, deleteTask, addStep, toggleStep, updateStep, updateSubsteps, addComment, addTaskComment } = useTasks(profile?.id)
   const { categories, createCategory } = useCategories(profile?.id)
 
-  const [filter,      setFilter]      = useState({ catId: null, status: null, priority: null })
-  const [showAdd,     setShowAdd]     = useState(false)
-  const [showShare,   setShowShare]   = useState(false)
-  const [showAddCat,  setShowAddCat]  = useState(false)
-  const [catName,     setCatName]     = useState('')
-  const [catColor,    setCatColor]    = useState(PALETTE[6])
-  const [viewMode,    setViewMode]    = useState('list') // 'list' | 'board'
-  const [savingCat,   setSavingCat]   = useState(false)
+  const [filterCat,    setFilterCat]    = useState(null)
+  const [showShare,    setShowShare]    = useState(false)
+  const [showAddCat,   setShowAddCat]   = useState(false)
+  const [catName,      setCatName]      = useState('')
+  const [catColor,     setCatColor]     = useState(PALETTE[6])
+  const [savingCat,    setSavingCat]    = useState(false)
+  const [addingTask,   setAddingTask]   = useState(false)
+  const [taskTitle,    setTaskTitle]    = useState('')
+  const [taskCat,      setTaskCat]      = useState(null)
+  const [title,        setTitle]        = useState(loadTitle)
+  const [editingTitle, setEditingTitle] = useState(false)
 
-  const visible = useMemo(() => tasks.filter(t => {
-    if (filter.catId    && t.category_id !== filter.catId)    return false
-    if (filter.status   && t.status      !== filter.status)   return false
-    if (filter.priority && t.priority    !== filter.priority) return false
-    return true
-  }), [tasks, filter])
+  const visible = useMemo(() =>
+    tasks.filter(t => !filterCat || t.category_id === filterCat),
+    [tasks, filterCat]
+  )
 
-  const stats = useMemo(() => {
-    const total  = tasks.length
-    const done   = tasks.filter(t => t.status === 'done').length
-    const active = tasks.filter(t => t.status === 'in_progress').length
-    return { total, done, active }
-  }, [tasks])
+  const stats = useMemo(() => ({
+    total:  tasks.length,
+    done:   tasks.filter(t => t.status === 'done').length,
+    active: tasks.filter(t => t.status === 'in_progress').length,
+  }), [tasks])
 
   async function handleAddCat() {
     if (!catName.trim()) return
@@ -55,9 +53,28 @@ export default function OwnerDashboard() {
     setCatName(''); setShowAddCat(false); setSavingCat(false)
   }
 
+  async function handleSaveTask() {
+    const v = taskTitle.trim()
+    if (!v) return
+    await createTask({ title: v, categoryId: taskCat || categories[0]?.id || null, status:'todo', priority:'medium' })
+    setTaskTitle(''); setAddingTask(false)
+  }
+
+  function commitTitle(e) {
+    const v = (e.target.value || '').trim()
+    if (v) { setTitle(v); try { localStorage.setItem('tt_board_title', v) } catch {} }
+    setEditingTitle(false)
+  }
+
   const today = new Date().toLocaleDateString('en-US', { weekday:'long', month:'long', day:'numeric' })
 
-  if (loading) return <AppLayout><LoadingState /></AppLayout>
+  if (loading) return (
+    <AppLayout>
+      <div style={{ height:200, display:'flex', alignItems:'center', justifyContent:'center', color:'var(--muted)', fontSize:14, fontWeight:600 }}>
+        Loading tasks…
+      </div>
+    </AppLayout>
+  )
 
   return (
     <AppLayout>
@@ -66,100 +83,119 @@ export default function OwnerDashboard() {
         {/* ── Header ── */}
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-end', flexWrap:'wrap', gap:16, marginBottom:'var(--gap)' }}>
           <div>
-            <div style={{ fontSize:13, fontWeight:600, color:'var(--muted)', letterSpacing:'.02em' }}>{today}</div>
-            <h1 style={{ fontSize:30, fontWeight:800, letterSpacing:'-.02em', marginTop:2, color:'var(--ink)' }}>Task Tracker</h1>
+            <div style={{ fontSize:11, fontWeight:700, textTransform:'uppercase', letterSpacing:'.13em', color:'var(--muted)' }}>{today}</div>
+            {editingTitle ? (
+              <input
+                autoFocus defaultValue={title}
+                onBlur={commitTitle}
+                onKeyDown={e => { if (e.key==='Enter') e.target.blur(); if (e.key==='Escape') setEditingTitle(false) }}
+                style={{ fontFamily:"'Syne',sans-serif", fontSize:32, fontWeight:800, letterSpacing:'-.02em', marginTop:5, border:'none', borderBottom:'2px solid var(--accent)', background:'transparent', color:'var(--ink)', outline:'none', width:'min(440px,72vw)' }}
+              />
+            ) : (
+              <h1 onClick={() => setEditingTitle(true)} title="Click to rename"
+                style={{ fontFamily:"'Syne',sans-serif", fontSize:32, fontWeight:800, letterSpacing:'-.02em', marginTop:5, color:'var(--ink)', cursor:'text', display:'inline-flex', alignItems:'center', gap:10 }}>
+                {title}
+                <span style={{ fontSize:14, color:'var(--muted)', opacity:.55 }}>✎</span>
+              </h1>
+            )}
           </div>
-
-          <div style={{ display:'flex', gap:10, flexWrap:'wrap' }}>
-            <StatCard value={stats.total}  label="Tasks"       dark={false} />
-            <StatCard value={stats.active} label="In progress" dark={false} />
-            <StatCard value={stats.done}   label="Completed"   dark={true} />
-            <button
-              onClick={() => setShowShare(true)}
-              style={{ background:'var(--surface)', border:'1px solid var(--line)', borderRadius:'var(--rad)', padding:'10px 16px', fontSize:12, fontWeight:700, color:'var(--ink)', boxShadow:'var(--shadow)', cursor:'pointer' }}
-            >
+          <div style={{ display:'flex', gap:10, flexWrap:'wrap', alignItems:'center' }}>
+            <StatCard value={stats.total}  label="Tasks"       />
+            <StatCard value={stats.active} label="In progress" />
+            <StatCard value={stats.done}   label="Completed"   accent />
+            <button onClick={() => setShowShare(true)}
+              style={{ background:'var(--surface)', border:'1px solid var(--line)', borderRadius:'var(--rad)', padding:'13px 18px', fontSize:12, fontWeight:700, color:'var(--ink)', boxShadow:'var(--shadow)', cursor:'pointer' }}>
               👤 Share
             </button>
           </div>
         </div>
 
-        {/* ── Status filter + view toggle ── */}
-        <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap', marginBottom:12 }}>
-          <StatusChip label="All" active={!filter.status} onClick={() => setFilter(f => ({ ...f, status: null }))} color="var(--ink)" />
-          {STATUS_COLS.map(s => (
-            <StatusChip key={s.key} label={s.label} active={filter.status === s.key} onClick={() => setFilter(f => ({ ...f, status: filter.status === s.key ? null : s.key }))} color={s.color} />
-          ))}
-          <div style={{ flex:1 }} />
-          <button onClick={() => setViewMode(v => v==='list' ? 'board' : 'list')}
-            style={{ background:'none', border:'1px solid var(--line)', borderRadius:'var(--rsm)', padding:'5px 12px', fontSize:12, fontWeight:600, color:'var(--muted)' }}>
-            {viewMode === 'list' ? '⊟ Board' : '≡ List'}
-          </button>
-        </div>
-
-        {/* ── Category chips ── */}
-        <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap', marginBottom:16 }}>
-          <CategoryChip label="All tasks" active={!filter.catId} onClick={() => setFilter(f => ({ ...f, catId: null }))} color="var(--ink)" />
+        {/* ── Category cards grid ── */}
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(168px,1fr))', gap:12, marginBottom:20 }}>
+          <CatCard label="All tasks" count={stats.total} color={null} active={filterCat===null} onClick={() => setFilterCat(null)} />
           {categories.map(cat => (
-            <CategoryChip
-              key={cat.id}
-              label={cat.name}
-              count={tasks.filter(t => t.category_id === cat.id).length}
-              active={filter.catId === cat.id}
-              onClick={() => setFilter(f => ({ ...f, catId: filter.catId === cat.id ? null : cat.id }))}
-              color={cat.color}
-            />
+            <CatCard key={cat.id} label={cat.name} count={tasks.filter(t=>t.category_id===cat.id).length} color={cat.color} active={filterCat===cat.id} onClick={() => setFilterCat(filterCat===cat.id ? null : cat.id)} />
           ))}
-          <button
-            onClick={() => setShowAddCat(v => !v)}
-            style={{ cursor:'pointer', padding:'7px 12px', borderRadius:999, fontSize:13, fontWeight:600, border:'1px dashed var(--line)', color:'var(--muted)', background:'none' }}
-          >
+          <button onClick={() => setShowAddCat(v=>!v)}
+            style={{ cursor:'pointer', border:'1px dashed var(--line)', borderRadius:'var(--rsm)', padding:'15px 17px', display:'flex', alignItems:'center', justifyContent:'center', gap:7, color:'var(--muted)', fontSize:13, fontWeight:600, minHeight:80, background:'none' }}>
             + Category
           </button>
         </div>
 
         {/* ── Add category inline ── */}
         {showAddCat && (
-          <div style={{ background:'var(--surface)', border:'1px solid var(--line)', borderRadius:'var(--rad)', padding:14, marginBottom:16, display:'flex', alignItems:'center', gap:12, flexWrap:'wrap', animation:'pop .18s ease', boxShadow:'var(--shadow)' }}>
-            <input
-              autoFocus
-              className="tt-input"
-              style={{ flex:1, minWidth:160 }}
-              placeholder="Category name"
-              value={catName}
-              onChange={e => setCatName(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter') handleAddCat() }}
+          <div style={{ background:'var(--surface)', border:'1px solid var(--line)', borderRadius:'var(--rad)', padding:18, marginBottom:16, animation:'pop .18s ease', boxShadow:'var(--shadow)' }}>
+            <input autoFocus value={catName} onChange={e=>setCatName(e.target.value)} placeholder="Category name"
+              onKeyDown={e=>{ if(e.key==='Enter') handleAddCat() }}
+              style={{ width:'100%', border:'1px solid var(--line)', borderRadius:'var(--rsm)', padding:'11px 14px', fontSize:14, fontWeight:600, outline:'none', background:'var(--surface2)', color:'var(--ink)', marginBottom:12 }}
             />
-            <div style={{ display:'flex', gap:7 }}>
+            <div style={{ fontSize:10, fontWeight:700, textTransform:'uppercase', letterSpacing:'.09em', color:'var(--muted)', marginBottom:10 }}>Colour</div>
+            <div style={{ display:'flex', flexWrap:'wrap', gap:9, maxWidth:520, marginBottom:14 }}>
               {PALETTE.map(col => (
-                <button
-                  key={col}
-                  onClick={() => setCatColor(col)}
-                  style={{ width:26, height:26, borderRadius:8, background:col, border:'none', boxShadow: catColor === col ? `0 0 0 2px var(--surface), 0 0 0 4px ${col}` : 'none', cursor:'pointer' }}
-                />
+                <button key={col} onClick={() => setCatColor(col)}
+                  style={{ width:26, height:26, borderRadius:7, background:col, border:'none', boxShadow: catColor===col?`0 0 0 2px var(--surface),0 0 0 4px ${col}`:'none', cursor:'pointer' }} />
               ))}
             </div>
-            <button onClick={handleAddCat} disabled={savingCat}
-              style={{ background:'var(--ink)', color:'var(--surface)', border:'none', borderRadius:'var(--rsm)', padding:'9px 16px', fontSize:13, fontWeight:600, opacity: savingCat ? .6 : 1 }}>
-              {savingCat ? '…' : 'Add'}
-            </button>
-            <button onClick={() => setShowAddCat(false)} style={{ background:'none', border:'none', color:'var(--muted)', fontSize:13, fontWeight:600 }}>Cancel</button>
+            <div style={{ display:'flex', justifyContent:'flex-end', gap:8 }}>
+              <button onClick={() => setShowAddCat(false)} style={{ background:'transparent', border:'none', color:'var(--muted)', fontSize:13, fontWeight:600, cursor:'pointer', padding:'9px 12px' }}>Cancel</button>
+              <button onClick={handleAddCat} disabled={savingCat}
+                style={{ background:'var(--accent)', color:'#fff', border:'none', borderRadius:'var(--rsm)', padding:'9px 20px', fontSize:13, fontWeight:700, cursor:'pointer', opacity: savingCat?.6:1 }}>
+                Add category
+              </button>
+            </div>
           </div>
         )}
 
         {/* ── New task button ── */}
-        <button
-          onClick={() => setShowAdd(true)}
-          style={{ width:'100%', background:'var(--surface)', border:'1.5px dashed var(--line)', borderRadius:'var(--rad)', padding:'14px 18px', fontSize:14, fontWeight:600, color:'var(--muted)', marginBottom:16, display:'flex', alignItems:'center', gap:10, cursor:'pointer', textAlign:'left' }}
-        >
+        <div onClick={() => { setAddingTask(true); if (!taskCat && categories[0]) setTaskCat(categories[0].id) }}
+          style={{ cursor:'pointer', background:'var(--surface)', border:'1.5px dashed var(--line)', borderRadius:'var(--rad)', padding:'14px 18px', fontSize:14, fontWeight:600, color:'var(--muted)', marginBottom:16, display:'flex', alignItems:'center', gap:10 }}>
           <span style={{ fontSize:18, lineHeight:1 }}>+</span> New task
-        </button>
+        </div>
 
-        {/* ── Task list / board ── */}
-        {viewMode === 'list' ? (
-          <TaskList tasks={visible} categories={categories} onUpdate={updateTask} onDelete={deleteTask} onToggleStep={toggleStep} onUpdateStep={updateStep} onAddStep={addStep} onAddComment={addComment} />
-        ) : (
-          <BoardView tasks={visible} categories={categories} onUpdate={updateTask} onDelete={deleteTask} onToggleStep={toggleStep} onUpdateStep={updateStep} onAddStep={addStep} onAddComment={addComment} />
+        {/* ── Inline add task ── */}
+        {addingTask && (
+          <div style={{ background:'var(--surface)', border:'1px solid var(--line)', borderRadius:'var(--rad)', padding:16, marginBottom:16, animation:'pop .18s ease', boxShadow:'var(--shadow)' }}>
+            <input autoFocus value={taskTitle} onChange={e=>setTaskTitle(e.target.value)} placeholder="What needs doing?"
+              onKeyDown={e=>{ if(e.key==='Enter') handleSaveTask() }}
+              style={{ width:'100%', border:'none', borderBottom:'1px solid var(--line)', padding:'6px 2px 12px', fontSize:17, fontWeight:700, outline:'none', background:'transparent', color:'var(--ink)' }}
+            />
+            <div style={{ display:'flex', alignItems:'center', gap:10, flexWrap:'wrap', marginTop:14 }}>
+              <span style={{ fontSize:12, fontWeight:600, color:'var(--muted)' }}>Category</span>
+              {categories.map(cat => {
+                const on = taskCat===cat.id
+                return (
+                  <div key={cat.id} onClick={() => setTaskCat(cat.id)}
+                    style={{ cursor:'pointer', display:'flex', alignItems:'center', gap:6, padding:'6px 12px', borderRadius:999, fontSize:12.5, fontWeight:600, border:`1.5px solid ${on?cat.color:'var(--line)'}`, background: on?hexAlpha(cat.color,0.13):'var(--surface)', color:'var(--ink)' }}>
+                    <span style={{ width:9, height:9, borderRadius:3, background:cat.color, display:'inline-block' }}/>
+                    {cat.name}
+                  </div>
+                )
+              })}
+              <div style={{ flex:1 }}/>
+              <button onClick={() => { setAddingTask(false); setTaskTitle('') }} style={{ background:'transparent', border:'none', color:'var(--muted)', fontSize:13, fontWeight:600, cursor:'pointer', padding:'8px 10px' }}>Cancel</button>
+              <button onClick={handleSaveTask} style={{ background:'var(--accentGrad)', color:'#fff', border:'none', borderRadius:'var(--rsm)', padding:'9px 18px', fontSize:13, fontWeight:600, cursor:'pointer' }}>Create task</button>
+            </div>
+          </div>
         )}
+
+        {/* ── Task list ── */}
+        <div style={{ display:'flex', flexDirection:'column', gap:'var(--cgap)' }}>
+          {visible.map(task => (
+            <TaskCard
+              key={task.id}
+              task={task}
+              permission="owner"
+              onUpdate={updateTask}
+              onDelete={deleteTask}
+              onToggleStep={toggleStep}
+              onUpdateStep={updateStep}
+              onUpdateSubsteps={updateSubsteps}
+              onAddStep={addStep}
+              onAddComment={addComment}
+              onAddTaskComment={addTaskComment}
+            />
+          ))}
+        </div>
 
         {visible.length === 0 && (
           <div style={{ textAlign:'center', padding:'48px 20px', color:'var(--muted)' }}>
@@ -168,104 +204,47 @@ export default function OwnerDashboard() {
           </div>
         )}
 
-        <div style={{ height:24 }} />
+        {/* ── Divider ── */}
+        <div style={{ height:2, background:'var(--line)', margin:'36px 0 32px', borderRadius:1 }} />
+
+        {/* ── Calendar ── */}
+        <CalendarSection categories={categories} />
+
+        <div style={{ height:36 }} />
+
+        {/* ── Messages ── */}
+        <MessagesSection />
+
+        <div style={{ height:32 }} />
       </div>
 
-      {showAdd && (
-        <TaskForm
-          categories={categories}
-          onSave={createTask}
-          onClose={() => setShowAdd(false)}
-        />
-      )}
       {showShare && <ShareModal onClose={() => setShowShare(false)} />}
     </AppLayout>
   )
 }
 
-function TaskList({ tasks, ...rest }) {
+function StatCard({ value, label, accent }) {
   return (
-    <div style={{ display:'flex', flexDirection:'column', gap:'var(--cgap)' }}>
-      {tasks.map(task => <TaskCard key={task.id} task={task} {...rest} />)}
+    <div style={{ background: accent?'var(--ink)':'var(--surface)', border: accent?'none':'1px solid var(--line)', borderRadius:'var(--rad)', padding:'13px 18px', minWidth:86, boxShadow: accent?'none':'var(--shadow)' }}>
+      <div style={{ fontSize:24, fontWeight:800, lineHeight:1, color: accent?'var(--surface)':'var(--ink)' }}>{value}</div>
+      <div style={{ fontSize:10, fontWeight:700, textTransform:'uppercase', letterSpacing:'.09em', color: accent?'rgba(255,255,255,.65)':'var(--muted)', marginTop:6 }}>{label}</div>
     </div>
   )
 }
 
-function BoardView({ tasks, ...rest }) {
+function CatCard({ label, count, color, active, onClick }) {
+  const cardBg  = active ? (color || 'var(--ink)') : 'var(--surface)'
+  const border  = active ? (color || 'var(--ink)') : 'var(--line)'
+  const nameFg  = active ? '#fff' : 'var(--ink)'
+  const countFg = active ? '#fff' : (color || 'var(--ink)')
+  const dotBg   = active ? 'rgba(255,255,255,.85)' : (color || 'var(--accentGrad)')
   return (
-    <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(280px, 1fr))', gap:16, alignItems:'start' }}>
-      {STATUS_COLS.map(col => {
-        const colTasks = tasks.filter(t => t.status === col.key)
-        return (
-          <div key={col.key}>
-            <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:10 }}>
-              <span style={{ width:10, height:10, borderRadius:'50%', background: col.color.startsWith('var') ? 'var(--muted)' : col.color, display:'inline-block' }} />
-              <span style={{ fontSize:12, fontWeight:700, color:'var(--muted)', letterSpacing:'.04em', textTransform:'uppercase' }}>{col.label}</span>
-              <span style={{ fontSize:11, fontWeight:700, color:'var(--muted)' }}>({colTasks.length})</span>
-            </div>
-            <div style={{ display:'flex', flexDirection:'column', gap:'var(--cgap)' }}>
-              {colTasks.map(task => <TaskCard key={task.id} task={task} {...rest} />)}
-              {colTasks.length === 0 && (
-                <div style={{ fontSize:12, color:'var(--muted)', fontStyle:'italic', padding:'12px 0' }}>Empty</div>
-              )}
-            </div>
-          </div>
-        )
-      })}
-    </div>
-  )
-}
-
-function StatCard({ value, label, dark }) {
-  return (
-    <div style={{
-      background:  dark ? 'var(--ink)' : 'var(--surface)',
-      border:      dark ? 'none' : '1px solid var(--line)',
-      borderRadius:'var(--rad)',
-      padding:     '10px 16px',
-      minWidth:    78,
-      boxShadow:   dark ? 'none' : 'var(--shadow)',
-    }}>
-      <div style={{ fontSize:22, fontWeight:800, lineHeight:1, color: dark ? 'var(--surface)' : 'var(--ink)' }}>{value}</div>
-      <div style={{ fontSize:11, fontWeight:600, color:'var(--muted)', marginTop:2 }}>{label}</div>
-    </div>
-  )
-}
-
-function StatusChip({ label, active, onClick, color }) {
-  const isVar = color.startsWith('var')
-  return (
-    <button onClick={onClick} style={{
-      cursor:'pointer', padding:'6px 12px', borderRadius:999, fontSize:12.5, fontWeight:600,
-      border: `1px solid ${active ? (isVar ? 'var(--ink)' : color) : 'var(--line)'}`,
-      background: active ? (isVar ? 'var(--ink)' : color) : 'var(--surface)',
-      color: active ? '#fff' : 'var(--ink)',
-    }}>
-      {label}
-    </button>
-  )
-}
-
-function CategoryChip({ label, count, active, onClick, color }) {
-  return (
-    <button onClick={onClick} style={{
-      cursor:'pointer', display:'flex', alignItems:'center', gap:7,
-      padding:'7px 13px', borderRadius:999, fontSize:13, fontWeight:600,
-      border: `1px solid ${active ? color : 'var(--line)'}`,
-      background: active ? color : 'var(--surface)',
-      color: active ? '#fff' : 'var(--ink)',
-    }}>
-      {color !== 'var(--ink)' && <span style={{ width:9, height:9, borderRadius:3, background:active ? 'rgba(255,255,255,.8)' : color, display:'inline-block' }} />}
-      {label}
-      {count !== undefined && <span style={{ fontWeight:700, color: active ? 'rgba(255,255,255,.8)' : color }}>{count}</span>}
-    </button>
-  )
-}
-
-function LoadingState() {
-  return (
-    <div style={{ display:'flex', alignItems:'center', justifyContent:'center', height:200, color:'var(--muted)', fontSize:14, fontWeight:600 }}>
-      Loading tasks…
+    <div onClick={onClick} style={{ cursor:'pointer', background:cardBg, border:`1px solid ${border}`, borderRadius:'var(--rsm)', padding:'15px 17px', display:'flex', flexDirection:'column', gap:11, boxShadow:'var(--shadow)' }}>
+      <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+        <span style={{ width:9, height:9, borderRadius: color?2:'50%', background:dotBg, flexShrink:0 }}/>
+        <span style={{ fontSize:11, fontWeight:700, textTransform:'uppercase', letterSpacing:'.06em', color:nameFg }}>{label}</span>
+      </div>
+      <span style={{ fontSize:26, fontWeight:800, color:countFg, lineHeight:1 }}>{count}</span>
     </div>
   )
 }

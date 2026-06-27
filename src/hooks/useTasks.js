@@ -14,7 +14,8 @@ export function useTasks(userId) {
       .select(`
         *,
         categories(id, name, color),
-        task_steps(*, step_comments(*))
+        task_steps(*, step_comments(*, profiles!step_comments_user_id_fkey(full_name, email))),
+        task_comments(*, profiles!task_comments_user_id_fkey(full_name, email))
       `)
       .eq('user_id', userId)
       .order('created_at', { ascending: false })
@@ -86,13 +87,32 @@ export function useTasks(userId) {
     return err
   }
 
+  async function updateSubsteps(stepId, substeps) {
+    const { error: err } = await supabase.from('task_steps').update({ substeps }).eq('id', stepId)
+    if (!err) {
+      setTasks(prev => prev.map(t => ({
+        ...t,
+        task_steps: t.task_steps.map(s => s.id === stepId ? { ...s, substeps } : s)
+      })))
+    }
+    return err
+  }
+
+  // ── Step comments ──────────────────────────────────────────────
   async function addComment(stepId, userId, text) {
     const { error: err } = await supabase.from('step_comments').insert({ step_id: stepId, user_id: userId, text })
     if (!err) await load()
     return err
   }
 
-  return { tasks, loading, error, refetch: load, createTask, updateTask, deleteTask, addStep, toggleStep, updateStep, addComment }
+  // ── Task-level comments ────────────────────────────────────────
+  async function addTaskComment(taskId, userId, text) {
+    const { error: err } = await supabase.from('task_comments').insert({ task_id: taskId, user_id: userId, text })
+    if (!err) await load()
+    return err
+  }
+
+  return { tasks, loading, error, refetch: load, createTask, updateTask, deleteTask, addStep, toggleStep, updateStep, updateSubsteps, addComment, addTaskComment }
 }
 
 // ── Manager view: read tasks belonging to another owner ──────────
@@ -102,7 +122,8 @@ export async function fetchOwnerTasks(ownerId) {
     .select(`
       *,
       categories(id, name, color),
-      task_steps(*, step_comments(*))
+      task_steps(*, step_comments(*, profiles!step_comments_user_id_fkey(full_name, email))),
+      task_comments(*, profiles!task_comments_user_id_fkey(full_name, email))
     `)
     .eq('user_id', ownerId)
     .order('created_at', { ascending: false })
