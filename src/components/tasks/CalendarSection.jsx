@@ -5,14 +5,14 @@ const H0 = 8, H1 = 20, ROW_H = 46
 function ymd(d) {
   return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0')
 }
-function mondayOf(d) {
+function sundayOf(d) {
   const m = new Date(d); m.setHours(0, 0, 0, 0)
-  const dow = (m.getDay() + 6) % 7; m.setDate(m.getDate() - dow); return m
+  const dow = m.getDay(); m.setDate(m.getDate() - dow); return m
 }
 function hourLabel(hf) {
   const h = Math.floor(hf), m = Math.round((hf - h) * 60)
   const ap = h < 12 ? 'AM' : 'PM'; let hh = h % 12; if (hh === 0) hh = 12
-  return hh + (m ? ':' + String(m).padStart(2, '0') : '') + ' ' + ap
+  return hh + (m ? ':' + String(m).padStart(2, '0') : '') + ' ' + ap
 }
 function hexAlpha(hex, a) {
   if (!hex || hex.startsWith('var')) return `rgba(136,136,136,${a})`
@@ -29,31 +29,31 @@ export default function CalendarSection({ categories }) {
   const [events,   setEvents]   = useState(loadCal)
   const [viewDate, setViewDate] = useState(new Date())
   const [adding,   setAdding]   = useState(false)
-  const [form,     setForm]     = useState({ title:'', date: ymd(new Date()), start:9, dur:1, kind:'task', catId:null })
+  const [form,     setForm]     = useState({ title:'', date: ymd(new Date()), start:9, end:10, kind:'task', catId:null })
   const evRef = useRef(events)
   useEffect(() => { evRef.current = events }, [events])
 
   const now = new Date()
-  const mon = mondayOf(viewDate)
-  const DAY_NAMES = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun']
+  const sun = sundayOf(viewDate)
+  const DAY_NAMES = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat']
 
   const weekDays = DAY_NAMES.map((nm, i) => {
-    const dt = new Date(mon); dt.setDate(mon.getDate() + i)
+    const dt = new Date(sun); dt.setDate(sun.getDate() + i)
     return { nm, date: dt.getDate(), isToday: dt.toDateString() === now.toDateString(), dstr: ymd(dt) }
   })
-  const last = new Date(mon); last.setDate(mon.getDate() + 6)
-  const weekLabel = mon.toLocaleDateString('en-US',{month:'short',day:'numeric'}) + ' → ' + last.toLocaleDateString('en-US',{month:'short',day:'numeric'}) + ', ' + mon.getFullYear()
+  const last = new Date(sun); last.setDate(sun.getDate() + 6)
+  const weekLabel = sun.toLocaleDateString('en-US',{month:'short',day:'numeric'}) + ' → ' + last.toLocaleDateString('en-US',{month:'short',day:'numeric'}) + ', ' + sun.getFullYear()
 
   const hours = []; for (let h = H0; h < H1; h++) hours.push(h)
   const gridH = (H1 - H0) * ROW_H
-  const startOpts = []; for (let h = H0; h < H1; h += 0.5) startOpts.push({ v:h, l:hourLabel(h) })
-  const durOpts = [0.5,1,1.5,2,2.5,3,4,5,6].map(d => ({ v:d, l: d<1?'30 min': d===1?'1 hr':d+' hrs' }))
+  const timeOpts = []; for (let h = H0; h <= H1; h += 0.5) timeOpts.push({ v:h, l:hourLabel(h) })
 
   function persist(evs) { setEvents(evs); evRef.current = evs; saveCal(evs) }
 
   function addEvent() {
     const title = form.title.trim() || (form.kind === 'meeting' ? 'Meeting' : 'Task')
-    persist([...evRef.current, { id:'e'+Math.random().toString(36).slice(2,8), ...form, title }])
+    const dur = Math.max(0.5, form.end - form.start)
+    persist([...evRef.current, { id:'e'+Math.random().toString(36).slice(2,8), ...form, dur, title }])
     const parts = form.date.split('-')
     setViewDate(new Date(+parts[0], +parts[1]-1, +parts[2]))
     setForm(f => ({ ...f, title:'' })); setAdding(false)
@@ -78,7 +78,7 @@ export default function CalendarSection({ categories }) {
     const rect = e.currentTarget.getBoundingClientRect()
     let h = H0 + (e.clientY - rect.top) / ROW_H
     h = Math.max(H0, Math.min(H1-1, Math.floor(h*2)/2))
-    setForm(f => ({ ...f, date:dstr, start:h, catId: f.catId || categories[0]?.id || null }))
+    setForm(f => ({ ...f, date:dstr, start:h, end:Math.min(H1, h+1), catId: f.catId || categories[0]?.id || null }))
     setAdding(true)
   }
 
@@ -136,12 +136,12 @@ export default function CalendarSection({ categories }) {
             <Pill label="When"><input type="date" value={form.date} onChange={e=>setForm(f=>({...f,date:e.target.value}))} style={{ border:'none', background:'transparent', fontSize:13.5, fontWeight:600, color:'var(--ink)', outline:'none', cursor:'pointer' }} /></Pill>
             <Pill label="From">
               <select value={form.start} onChange={e=>setForm(f=>({...f,start:parseFloat(e.target.value)}))} style={{ border:'none', background:'transparent', fontSize:13.5, fontWeight:600, color:'var(--ink)', outline:'none', cursor:'pointer', appearance:'none', paddingRight:16 }}>
-                {startOpts.map(o=><option key={o.v} value={o.v}>{o.l}</option>)}
+                {timeOpts.filter(o=>o.v < H1).map(o=><option key={o.v} value={o.v}>{o.l}</option>)}
               </select>
             </Pill>
-            <Pill label="For">
-              <select value={form.dur} onChange={e=>setForm(f=>({...f,dur:parseFloat(e.target.value)}))} style={{ border:'none', background:'transparent', fontSize:13.5, fontWeight:600, color:'var(--ink)', outline:'none', cursor:'pointer', appearance:'none', paddingRight:16 }}>
-                {durOpts.map(o=><option key={o.v} value={o.v}>{o.l}</option>)}
+            <Pill label="To">
+              <select value={form.end} onChange={e=>setForm(f=>({...f,end:parseFloat(e.target.value)}))} style={{ border:'none', background:'transparent', fontSize:13.5, fontWeight:600, color:'var(--ink)', outline:'none', cursor:'pointer', appearance:'none', paddingRight:16 }}>
+                {timeOpts.filter(o=>o.v > form.start).map(o=><option key={o.v} value={o.v}>{o.l}</option>)}
               </select>
             </Pill>
             {form.kind === 'task' && categories.length > 0 && (

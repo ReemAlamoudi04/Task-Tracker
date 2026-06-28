@@ -207,8 +207,11 @@ export default function OwnerDashboard() {
         {/* ── Divider ── */}
         <div style={{ height:2, background:'var(--line)', margin:'36px 0 32px', borderRadius:1 }} />
 
-        {/* ── Calendar ── */}
-        <CalendarSection categories={categories} />
+        {/* ── Calendar + Checklist ── */}
+        <div style={{ display:'grid', gridTemplateColumns:'1fr minmax(240px,300px)', gap:20, alignItems:'start' }}>
+          <CalendarSection categories={categories} />
+          <TaskChecklist tasks={tasks} categories={categories} onUpdate={updateTask} />
+        </div>
 
         <div style={{ height:36 }} />
 
@@ -228,6 +231,63 @@ function StatCard({ value, label, accent }) {
     <div style={{ background: accent?'var(--ink)':'var(--surface)', border: accent?'none':'1px solid var(--line)', borderRadius:'var(--rad)', padding:'13px 18px', minWidth:86, boxShadow: accent?'none':'var(--shadow)' }}>
       <div style={{ fontSize:24, fontWeight:800, lineHeight:1, color: accent?'var(--surface)':'var(--ink)' }}>{value}</div>
       <div style={{ fontSize:10, fontWeight:700, textTransform:'uppercase', letterSpacing:'.09em', color: accent?'rgba(255,255,255,.65)':'var(--muted)', marginTop:6 }}>{label}</div>
+    </div>
+  )
+}
+
+const STATUS_ORDER = { in_progress:0, todo:1, blocked:2, done:3 }
+const STATUS_LABELS = { todo:'To Do', in_progress:'In Progress', done:'Done', blocked:'Blocked' }
+const STATUS_COLORS = { todo:'var(--muted)', in_progress:'#3b82f6', done:'#30a46c', blocked:'#e5484d' }
+
+function TaskChecklist({ tasks, categories, onUpdate }) {
+  const sorted = [...tasks].sort((a,b) => (STATUS_ORDER[a.status]??9) - (STATUS_ORDER[b.status]??9))
+  const done = tasks.filter(t=>t.status==='done').length
+
+  return (
+    <div style={{ background:'var(--surface)', border:'1px solid var(--line)', borderRadius:'var(--rad)', boxShadow:'var(--shadow)', overflow:'hidden' }}>
+      <div style={{ padding:'16px 18px 12px', borderBottom:'1px solid var(--line)' }}>
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+          <h3 style={{ fontFamily:"'Syne',sans-serif", fontSize:15, fontWeight:800, color:'var(--ink)' }}>Tasks</h3>
+          <span style={{ fontSize:11, fontWeight:700, color:'var(--muted)' }}>{done}/{tasks.length} done</span>
+        </div>
+        {tasks.length > 0 && (
+          <div style={{ marginTop:8, height:5, background:'var(--surface2)', borderRadius:999, overflow:'hidden', border:'1px solid var(--line)' }}>
+            <div style={{ height:'100%', borderRadius:999, background:'var(--accentGrad)', width:`${tasks.length ? Math.round(done/tasks.length*100) : 0}%`, transition:'width .3s' }} />
+          </div>
+        )}
+      </div>
+      <div style={{ maxHeight:520, overflowY:'auto', padding:'8px 0' }}>
+        {sorted.length === 0 && (
+          <div style={{ padding:'24px 18px', textAlign:'center', fontSize:13, color:'var(--muted)' }}>No tasks yet</div>
+        )}
+        {sorted.map(task => {
+          const cat = task.categories
+          const isDone = task.status === 'done'
+          return (
+            <div key={task.id} style={{ display:'flex', alignItems:'center', gap:11, padding:'9px 16px', borderBottom:'1px solid var(--line)', opacity: isDone ? .55 : 1 }}>
+              <button
+                onClick={() => onUpdate(task.id, { status: isDone ? 'todo' : 'done' })}
+                title={isDone ? 'Mark incomplete' : 'Mark done'}
+                style={{ width:20, height:20, borderRadius:'50%', border:`2px solid ${isDone ? '#30a46c' : 'var(--line)'}`, background: isDone ? '#30a46c' : 'transparent', color:'#fff', fontSize:10, fontWeight:800, display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer', flexShrink:0 }}
+              >
+                {isDone ? '✓' : ''}
+              </button>
+              <div style={{ flex:1, minWidth:0 }}>
+                <div style={{ fontSize:13, fontWeight:600, color:'var(--ink)', textDecoration: isDone?'line-through':'none', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{task.title}</div>
+                {cat && (
+                  <div style={{ display:'flex', alignItems:'center', gap:4, marginTop:2 }}>
+                    <span style={{ width:7, height:7, borderRadius:2, background:cat.color, display:'inline-block' }}/>
+                    <span style={{ fontSize:10.5, fontWeight:600, color:'var(--muted)' }}>{cat.name}</span>
+                  </div>
+                )}
+              </div>
+              <span style={{ fontSize:10, fontWeight:700, color: STATUS_COLORS[task.status], flexShrink:0 }}>
+                {STATUS_LABELS[task.status]}
+              </span>
+            </div>
+          )
+        })}
+      </div>
     </div>
   )
 }

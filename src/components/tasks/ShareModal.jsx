@@ -36,6 +36,11 @@ export default function ShareModal({ onClose }) {
     setAccess(data || [])
   }
 
+  function inviteUrl(token) {
+    const base = import.meta.env.VITE_APP_URL || window.location.origin
+    return `${base}/invite/${token}`
+  }
+
   async function generateLink() {
     setBusy(true)
     const { data, error } = await supabase
@@ -45,7 +50,7 @@ export default function ShareModal({ onClose }) {
       .single()
     setBusy(false)
     if (error || !data) return
-    const url = `${window.location.origin}/invite/${data.token}`
+    const url = inviteUrl(data.token)
     setGenerated({ url, id: data.id })
     loadLinks()
   }
@@ -116,7 +121,7 @@ export default function ShareModal({ onClose }) {
           <div style={{ fontSize:12, fontWeight:700, letterSpacing:'.04em', textTransform:'uppercase', color:'var(--muted)', marginBottom:8 }}>Active links</div>
           <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
             {links.map(l => {
-              const url = `${window.location.origin}/invite/${l.token}`
+              const url = inviteUrl(l.token)
               return (
                 <div key={l.id} style={{ display:'flex', alignItems:'center', gap:8, padding:'8px 10px', background:'var(--surface2)', border:'1px solid var(--line)', borderRadius:'var(--rsm)' }}>
                   <PermBadge permission={l.permission} />
